@@ -4,6 +4,16 @@ This project provides a complete environment to test the Google Gemini API using
 
 ---
 
+## The following models are currently supported
+* **gemini-2.5-flash-lite (Lite)**
+* **gemini-2.5-flash**
+* **gemini-2.5-pro (Advanced)**
+
+## The following models are still being tested
+* **Imagen 4.0 (Image Generation)** (Requires paid account to access API.) 
+
+---
+
 ## 1. Prerequisites
 
 You must have the following installed:
