@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini API Tester</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+        }
+        /* Style for response text output */
+        .response-text {
+            white-space: pre-wrap; /* Preserve whitespace and handle wrapping */
+            word-wrap: break-word;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen p-4 sm:p-6">
+    <div class="bg-white rounded-xl shadow-2xl p-6 sm:p-8 w-full max-w-4xl border border-gray-200">
+        <header class="text-center mb-6 sm:mb-8">
+            <h1 class="text-3xl sm:text-4xl font-bold text-gray-800">
+                Gemini/Imagen API Tester
+            </h1>
+            <p class="text-gray-500 mt-2">
+                Select a model and enter a prompt to interact with the API.
+            </p>
+        </header>
+
+        <main>
+            <div class="space-y-4">
+                <div class="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-4">
+                    <label for="modelSelect" class="text-gray-700 font-medium whitespace-nowrap">Select Model:</label>
+                    <select id="modelSelect" class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 transition duration-150 ease-in-out">
+                        <option value="gemini-2.5-flash">gemini-2.5-flash (Fast)</option>
+                        <option value="gemini-2.5-pro">gemini-2.5-pro (Advanced)</option>
+                        <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite (Lite)</option>
+                        <option value="imagen-4.0-generate-001">Imagen 4.0 (Image Generation)</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label for="promptInput" class="block text-sm font-medium text-gray-700 mb-1">Prompt:</label>
+                    <textarea id="promptInput" rows="4" placeholder="Enter your prompt here (e.g., 'Write a short story about a lost spaceman on a planet of sentient cats' or 'A photorealistic image of a golden retriever wearing a tiny chef hat')." class="block w-full rounded-lg border-gray-300 shadow-sm p-3 focus:border-indigo-500 focus:ring-indigo-500 transition duration-150 ease-in-out"></textarea>
+                </div>
+
+                <div class="flex justify-center">
+                    <button id="submitButton" class="w-full sm:w-auto inline-flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-lg shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-150 ease-in-out">
+                        Generate Response
+                    </button>
+                </div>
+            </div>
+
+            <div id="loadingSpinner" class="hidden text-center mt-6">
+                <svg class="animate-spin -ml-1 mr-3 h-8 w-8 text-indigo-600 inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <p class="text-indigo-600 mt-2">Generating...</p>
+            </div>
+
+            <div id="responseContainer" class="hidden mt-8 p-6 bg-gray-50 rounded-lg border border-gray-200 shadow-inner">
+                <h3 class="text-xl font-semibold text-gray-800 mb-4">API Response</h3>
+                
+                <div id="responseResult" class="min-h-[100px] p-4 bg-white rounded-lg border border-gray-300 overflow-auto">
+                    </div>
+
+                <div class="mt-4 flex flex-col sm:flex-row justify-between items-center space-y-3 sm:space-y-0">
+                    <span id="duration" class="text-sm font-medium text-gray-500">Response Time: 0.00s</span>
+                    <button id="copyButton" class="px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-500 hover:bg-indigo-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-400 transition duration-150 ease-in-out">
+                        Copy Response
+                    </button>
+                </div>
+            </div>
+
+            <div id="customAlert" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden items-center justify-center p-4 z-50">
+                <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm">
+                    <h4 id="alertTitle" class="text-lg font-bold mb-2 text-gray-800"></h4>
+                    <p id="alertMessage" class="text-gray-600 mb-4"></p>
+                    <button id="alertCloseButton" class="w-full px-4 py-2 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        OK
+                    </button>
+                </div>
+            </div>
+            
+        </main>
+    </div>
+
+    <script>
+        (function() {
+            const submitButton = document.getElementById('submitButton');
+            const promptInput = document.getElementById('promptInput');
+            const modelSelect = document.getElementById('modelSelect');
+            const loadingSpinner = document.getElementById('loadingSpinner');
+            const responseContainer = document.getElementById('responseContainer');
+            const copyButton = document.getElementById('copyButton');
+            
+            // Custom Alert functions
+            const customAlert = document.getElementById('customAlert');
+            const alertTitle = document.getElementById('alertTitle');
+            const alertMessage = document.getElementById('alertMessage');
+            const alertCloseButton = document.getElementById('alertCloseButton');
+
+            function showCustomAlert(title, message) {
+                alertTitle.textContent = title;
+                alertMessage.textContent = message;
+                customAlert.classList.remove('hidden');
+                customAlert.classList.add('flex');
+            }
+
+            alertCloseButton.onclick = () => {
+                customAlert.classList.add('hidden');
+                customAlert.classList.remove('flex');
+            };
+
+            // Main API call logic
+            submitButton.addEventListener('click', async () => {
+                const prompt = promptInput.value.trim();
+                const model = modelSelect.value;
+                
+                if (!prompt) {
+                    showCustomAlert("Error", "Please enter a prompt.");
+                    return;
+                }
+
+                // Show loading state
+                responseContainer.classList.add('hidden');
+                loadingSpinner.classList.remove('hidden');
+
+                try {
+                    const response = await fetch('/gemini_call', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ prompt, model }),
+                    });
+
+                    const data = await response.json();
+
+                    if (!response.ok) {
+                        // Handle HTTP errors or API-returned errors
+                        throw new Error(data.error || 'Unknown API Error');
+                    }
+
+                    handleResponse(data);
+
+                } catch (error) {
+                    console.error('Fetch error:', error);
+                    showCustomAlert("Request Failed", `An error occurred: ${error.message}`);
+                } finally {
+                    // Hide loading state
+                    loadingSpinner.classList.add('hidden');
+                }
+            });
+
+            // --- MODIFIED: Handle Text and Image Responses ---
+            function handleResponse(data) {
+                const resultDiv = document.getElementById('responseResult');
+                const durationSpan = document.getElementById('duration');
+
+                durationSpan.textContent = `Response Time: ${data.duration}s`;
+                
+                // Clear previous content
+                resultDiv.innerHTML = '';
+                
+                // Handle Image or Text Response
+                if (data.result_type === 'image' && data.image_base64) {
+                    // Create an image element
+                    const img = document.createElement('img');
+                    // Set the image source using the Base64 data
+                    img.src = `data:image/png;base64,${data.image_base64}`;
+                    img.alt = "Generated Image";
+                    img.className = "w-full h-auto rounded-lg shadow-lg border border-gray-300";
+                    
+                    // Append image to the result div
+                    resultDiv.appendChild(img);
+
+                    // Update the copy button to copy the prompt, as the image cannot be copied as text
+                    document.getElementById('copyButton').onclick = () => {
+                         const promptToCopy = document.getElementById('promptInput').value;
+                         copyTextToClipboard(promptToCopy); 
+                         showCustomAlert("Success!", "Image prompt copied to clipboard.");
+                    }
+
+                } else if (data.result_type === 'text' && data.result) {
+                    // Existing text handling logic
+                    const textSpan = document.createElement('span');
+                    textSpan.className = 'response-text text-gray-700';
+                    textSpan.textContent = data.result;
+                    resultDiv.appendChild(textSpan);
+
+                    // Update the copy button to copy the text response
+                    document.getElementById('copyButton').onclick = () => {
+                        copyTextToClipboard(data.result);
+                    };
+                } else {
+                    // Fallback for unexpected data
+                    resultDiv.textContent = 'Error: Received an unexpected response format.';
+                    document.getElementById('copyButton').onclick = null;
+                }
+
+                // Show the result container
+                document.getElementById('responseContainer').classList.remove('hidden');
+                
+                // Scroll to the result
+                document.getElementById('responseContainer').scrollIntoView({ behavior: 'smooth' });
+            }
+            // --- END MODIFIED BLOCK ---
+            
+            // Clipboard functions
+            copyButton.addEventListener('click', () => {
+                // The actual copy logic is now set inside handleResponse based on the content type
+            });
+            
+            // Default copy action for the initial state before a response is received
+            document.getElementById('copyButton').onclick = () => {
+                showCustomAlert("Info", "Please generate a response first.");
+            };
+            
+            // Function to copy text using the modern clipboard API, with a fallback
+            function copyTextToClipboard(textToCopy) {
+                if (navigator.clipboard) {
+                    navigator.clipboard.writeText(textToCopy).then(() => {
+                        showCustomAlert("Success!", "Response copied to clipboard.");
+                    }).catch(err => {
+                        console.error('Failed to copy text using clipboard API: ', err);
+                        // Fallback to old method if modern one fails
+                        fallbackCopyTextToClipboard(textToCopy);
+                    });
+                } else {
+                    fallbackCopyTextToClipboard(textToCopy);
+                }
+            }
+            
+            function fallbackCopyTextToClipboard(text) {
+                const tempTextArea = document.createElement("textarea");
+                tempTextArea.value = text;
+                // Avoid scrolling to bottom of page in Windows
+                tempTextArea.style.position = 'fixed';
+                tempTextArea.style.top = 0;
+                tempTextArea.style.left = 0;
+                document.body.appendChild(tempTextArea);
+                tempTextArea.focus();
+                tempTextArea.select();
+                try {
+                    document.execCommand('copy');
+                    showCustomAlert("Success!", "Response copied to clipboard (fallback).");
+                } catch (err) {
+                    showCustomAlert("Copy Failed", "Failed to copy text. Please try again.");
+                } finally {
+                    document.body.removeChild(tempTextArea);
+                }
+            }
+        })();
+    </script>
+</body>
+</html>
