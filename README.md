@@ -10,7 +10,7 @@ This project provides a complete environment to test the Google Gemini API using
 * **gemini-2.5-pro (Advanced)**
 
 ## The following models are still being tested
-* **Imagen 4.0 (Image Generation)** (Requires paid account to access API.) 
+* **Imagen 3.0 (Image Generation)** (Requires paid account to access API.) 
 
 ---
 
