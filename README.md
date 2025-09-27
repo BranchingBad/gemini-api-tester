@@ -1,4 +1,4 @@
-# Gemini API Tester (Flask Web UI & CLI) INPROGRESS
+# Gemini API Tester
 
 This project provides a complete environment to test the Google Gemini API using both a simple **Flask web frontend** and a **standalone Python command-line interface (CLI) script**. It uses **Docker/Podman** for containerization to ensure a consistent and portable setup.
 
