@@ -1,5 +1,6 @@
 import os
 import json
+import argparse
 from google import genai
 from google.genai import types
 
@@ -13,13 +14,13 @@ def google_search(queries: list[str]) -> str:
     print(f"--- TOOL CALLING: Searching for: {queries[0]} ---")
     
     # This is a mock implementation of the search results for demonstration.
-    # In a real setup, you would use a search tool like the official Google Search API.
+    # The snippet is chosen to be flexible enough for different ingredient lists.
     mock_results = {
         "results": [
             {
-                "title": "One-Pot Kielbasa and Veggie Pasta",
+                "title": "One-Pot Sausage and Cheesy Tomato Pasta Skillet",
                 "snippet": "A fast weeknight meal combining sliced smoked sausage, a box of pasta, jarred tomato sauce, and shredded cheese in a single pot. Ready in 30 minutes.",
-                "url": "https://mock-recipe-site.com/kielbasa-pasta"
+                "url": "https://mock-recipe-site.com/sausage-pasta-skillet"
             }
         ]
     }
@@ -35,9 +36,40 @@ def generate_recipe_card(core_ingredients: list[str]):
     """
     
     # --- Client Initialization ---
-    # Ensure your GEMINI_API_KEY is set in your environment variables
     if not os.getenv("GEMINI_API_KEY"):
-        raise ValueError("GEMINI_API_KEY environment variable not set.")
+        # Handle case where client cannot be initialized (e.g., key missing)
+        print("--- WARNING: GEMINI_API_KEY environment variable not set. Generating MOCK response. ---")
+        
+        # --- Mock Final Output for Demonstration if API Key is missing ---
+        ingredient_list = ", ".join(core_ingredients)
+        mock_response_text = f"""
+**[RECIPE CARD IMAGE: WHAT'S FOR DINNER?]**
+
+**CORE INGREDIENTS**
+{ingredient_list}
+
+***
+
+**RECIPE: QUICK KIELBASA & CHEESY TOMATO PASTA**
+*(Time: 30 Min)*
+
+**Description:**
+This simple, one-pot dish uses your staples for a flavorful, hearty meal. Sliced kielbasa is simmered with pasta and marinara, then topped with melty cheese.
+
+**Steps:**
+1.  Slice the kielbasa and brown it in a large pot or skillet for 5 minutes.
+2.  Add marinara sauce, water (or broth), and uncooked pasta to the pot.
+3.  Bring to a boil, then cover and simmer for 15-20 minutes until the pasta is tender, stirring occasionally.
+4.  Remove from heat and stir in the shredded cheese until it melts into the sauce.
+5.  Season with salt and pepper to taste. Serve immediately.
+"""
+        print("\n" + "="*80)
+        print("GENERATED RECIPE CARD (MOCK):")
+        print("="*80)
+        print(mock_response_text)
+        print("="*80)
+        return
+    
     client = genai.Client()
 
     # --- Prepare Prompt and Tools ---
@@ -103,15 +135,36 @@ def generate_recipe_card(core_ingredients: list[str]):
         print(response.text)
 
 
-# --- 7. Execution Block ---
+# --- 7. Execution Block (MODIFIED) ---
 if __name__ == "__main__":
-    # Example ingredients from the user's initial haul
-    my_ingredients = [
-        "Turkey Kielbasa", 
-        "Penne Pasta", 
-        "Jarred Marinara Sauce", 
-        "Shredded Mozzarella Cheese", core_ingredients 
-        "Instant Potatoes"
-    ]
+    # Setup argument parsing
+    parser = argparse.ArgumentParser(
+        description="Generate a recipe card based on a list of ingredients using the Gemini API."
+    )
+    parser.add_argument(
+        "--ingredients", 
+        type=str, 
+        required=True,
+        help="A comma-separated list of core ingredients (e.g., apple, orange, pasta,banna)"
+    )
     
+    args = parser.parse_args()
+    
+    # Process the comma-separated string into a list
+    # Strip whitespace from each item and filter out empty strings resulting from extra commas
+    raw_ingredients = [item.strip() for item in args.ingredients.split(',')]
+    my_ingredients = [item for item in raw_ingredients if item]
+
+    # **NEW ERROR CHECK**
+    if not my_ingredients:
+        print("\nFATAL ERROR: The '--ingredients' argument was provided, but no ingredients were listed.")
+        print("Please provide a comma-separated list of ingredients. Example:")
+        print("  python whats-for-dinner.py --ingredients turkey kielbasa, penne pasta, mozzarella cheese")
+        exit(1)
+    
+    print(f"--- Input Ingredients: {my_ingredients} ---")
+
+    # Run the main function
     generate_recipe_card(my_ingredients)
+
+    # python whats-for-dinner.py --ingredients "turkey kielbasa, penne pasta, jarred marinara sauce, shredded mozzarella, instant potatoes"
