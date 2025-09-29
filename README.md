@@ -9,8 +9,8 @@ This project provides a complete environment to test the Google Gemini API using
 * **gemini-2.5-flash** (Image input optional.)
 * **gemini-2.5-pro (Advanced)**
 
-## The following models are still being tested
-* **Imagen 3.0 (Image Generation)** (Requires paid account to access API. Image input required.) 
+## Image Generation Model
+* **gemini-2.5-flash-image-preview (Image Generation)** (Text-to-Image and conversational editing.) (Needs testing but I hit the qouta limit for the day)
 
 ---
 
@@ -30,75 +30,98 @@ More information can be found at https://ai.google.dev/gemini-api/docs/api-key
 **Linux/macOS (For current session):**
 ```bash
 export GEMINI_API_KEY="YOUR_API_KEY_HERE"
-```
+Windows (Command Prompt):
+Bash
 
-### Windows (Command Prompt):
-
-```bash
 set GEMINI_API_KEY="YOUR_API_KEY_HERE"
-```
+2. Using the CLI Script (gemini-test.py)
+The standalone Python script is useful for quick, command-line testing.
 
-## 2. Using the CLI Script (gemini-test.py)
-The standalone Python script is useful for quick testing and benchmarking without running the full web server.
+Usage:
 
-Installation
-Install the necessary Python dependencies locally:
+Bash
 
-```bash
-pip install -r requirements.txt
-```
+# Default model (gemini-2.5-flash)
+python gemini-test.py "Explain why the sky is blue."
 
-### Usage
-Run the script directly from the command line.
+# Specify a different model
+python gemini-test.py --model gemini-2.5-pro "Write a full whitepaper on the future of AI."
 
-### Option 1: Use the Default Model (gemini-2.5-flash)
-Provide the prompt as a quoted argument after the script name.
-
-```bash
-python gemini-test.py "Explain the concept of containerization in one paragraph."
-```
-
-### Option 2: Specify a Model
-Use the --model flag followed by the model name, and then the prompt.
-
-```bash
-python gemini-test.py --model gemini-2.5-pro "Write a short, dramatic monologue about a lost spaceman."
-```
-
-## 3. Running the Web UI with Podman/Docker
+# Image Generation Example (will save a .png file)
+python gemini-test.py --model gemini-2.5-flash-image-preview "A photorealistic image of a futuristic castle on a moonlit ocean."
+3. Running the Web UI with Podman/Docker
 The web application is containerized using the provided Dockerfile and is designed to run on port 5000 inside the container.
 
-### Step 1: Build the Container Image
+Step 1: Build the Container Image
 This command builds the image, tags it as gemini-frontend, and passes your local GEMINI_API_KEY environment variable into the image using a build argument.
 
-```bash
+Bash
+
 podman build -t gemini-frontend --build-arg GEMINI_API_KEY=$GEMINI_API_KEY .
 # OR (for Docker)
 # docker build -t gemini-frontend --build-arg GEMINI_API_KEY=$GEMINI_API_KEY .
-```
-
-### Step 2: Run the Container
+Step 2: Run the Container
 Run the image, mapping the container's internal port 5000 to an external port (e.g., 8080) on your host machine. You can manually replace $GEMINI_API_KEY with your API key if you wish. It is recomened to use an enviroment variable (attackers can check command line history for previously used keys. Ask Gemini why this is best practice if you need).
 
-```bash
+Bash
+
 podman run -d -p 8080:5000 --name gemini-app -e GEMINI_API_KEY=$GEMINI_API_KEY gemini-frontend
 # OR (for Docker)
 # docker run -d -p 8080:5000 --name gemini-app gemini-frontend
-```
-
-### Step 3: Access the Application
+Step 3: Access the Application
 Open your web browser and navigate to:
 
 http://localhost:8080
 
-You can now use the interface to select models and send prompts.
+You can now use the interface to test multimodal (image + text) and text-only models, as well as the new image generation model.
 
-Container Management
-To stop and remove the running container:
-```bash
-podman stop gemini-app
-podman rm gemini-app
-# OR (for Docker)
-# docker stop gemini-app
-# docker rm gemini-app
-```
+
+---
+
+## Unchanged Files (for completeness)
+
+### `requirements.txt`
+```text
+flask
+flask-cors
+google-genai
+Pillow  
+Dockerfile
+Dockerfile
+
+# Dockerfile
+
+ARG GEMINI_API_KEY=
+
+# Stage 1: Build the Python application
+FROM python:3.9-slim AS build
+
+WORKDIR /app
+
+# COPY requirements first to leverage Docker's layer caching
+COPY requirements.txt .
+# Install dependencies (will now include Pillow)
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application files (app.py and gemini-test.py)
+COPY app.py .
+COPY gemini-test.py . 
+
+# Stage 2: Serve the front end and run the backend
+FROM python:3.9-slim
+
+WORKDIR /app
+
+ENV GEMINI_API_KEY=${GEMINI_API_KEY}
+
+# Copy dependencies from the build stage
+# Copy the *installed* dependencies, not the whole site-packages
+COPY --from=build /usr/local/lib/python3.9/site-packages /usr/local/lib/python3.9/site-packages
+COPY --from=build /app/app.py /app/
+
+# Copy the HTML file into the correct directory.
+COPY gemini_frontend.html /app/static_html/gemini_frontend.html
+
+EXPOSE 5000
+
+CMD ["python", "app.py"]

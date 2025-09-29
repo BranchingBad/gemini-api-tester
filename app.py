@@ -5,13 +5,17 @@ from flask_cors import CORS
 import sys
 import os
 import time
+import base64
+from io import BytesIO
+
+# Import SDK components
 from google import genai
-# Import types for configuration, and PIL for image processing
 from google.genai import types 
 from google.genai.errors import APIError 
-from PIL import Image
-from io import BytesIO
-import base64
+
+# Import for image handling
+from PIL import Image 
+from google.genai.types import GenerateContentConfig, Modality # Explicitly import for clarity
 
 
 # --- Flask Application Setup ---
@@ -32,66 +36,95 @@ except Exception as e:
     print(f"Error initializing Gemini client: {e}", file=sys.stderr)
 
 
-# Define the model ID for image generation (Updated to current standard)
-IMAGE_MODEL_ID = "imagen-3.0-generate-002" 
+# Define the model ID for image generation (Updated)
+IMAGE_MODEL_ID = "gemini-2.5-flash-image-preview" 
 
 @app.route('/', defaults={'path': ''})
 def serve_static(path):
     """Serves the HTML frontend."""
+    # The file path is gemini_frontend.html inside the static_html directory
     return send_from_directory(app.static_folder, 'gemini_frontend.html')
 
 @app.route('/gemini_call', methods=['POST'])
 def gemini_call():
     """Handles the API call to the Gemini service."""
     if GEMINI_CLIENT is None:
-        return jsonify({"error": "Gemini client not initialized. Check GEMINI_API_KEY."}), 503
+        return jsonify({"error": "Gemini client is not initialized. Check server logs."}), 500
 
     try:
-        data = request.get_json()
-        prompt = data.get('prompt')
+        data = request.json
         model_name = data.get('model', 'gemini-2.5-flash')
-        image_base64 = data.get('image_base64')
+        prompt = data.get('prompt', '')
+        image_base64 = data.get('image_data') # Base64 image data for multimodal input
 
+        # A prompt is required for all calls
         if not prompt:
-            return jsonify({"error": "Prompt is required."}), 400
+            return jsonify({"error": "Prompt cannot be empty."}), 400
 
         start_time = time.time()
         
-        # --- Image Generation Logic ---
+        # --- Image Generation Logic (New) ---
         if model_name == IMAGE_MODEL_ID:
-            # Generate the image based on the prompt
-            result = GEMINI_CLIENT.models.generate_images(
-                model=IMAGE_MODEL_ID,
-                prompt=prompt,
-                config=dict(
-                    number_of_images=1,
-                    output_mime_type="image/jpeg",
-                    aspect_ratio="1:1"
-                )
+            # Configuration must explicitly request an image output
+            config = GenerateContentConfig(
+                response_modalities=[Modality.TEXT, Modality.IMAGE]
+            )
+            
+            # Image generation models primarily use the text prompt
+            response = GEMINI_CLIENT.models.generate_content(
+                model=model_name,
+                contents=[prompt],
+                config=config
             )
 
+            # Look for the generated image data in the response parts
+            generated_image_base64 = None
+            mime_type = 'image/png' # Default MIME type
+            
+            for part in response.candidates[0].content.parts:
+                if part.inline_data:
+                    # Found the image data
+                    generated_image_base64 = part.inline_data.data
+                    mime_type = part.inline_data.mime_type
+                    break
+            
             end_time = time.time()
             duration = end_time - start_time
-
-            img_bytes = result.generated_images[0].image.image_bytes
-            img_base64 = base64.b64encode(img_bytes).decode('utf-8')
             
-            return jsonify({
-                "result_type": "image",
-                "image_base64": img_base64,
-                "duration": f"{duration:.2f}"
-            })
-        
+            if generated_image_base64:
+                return jsonify({
+                    "result_type": "image",
+                    "result": generated_image_base64, # Base64 string of the image
+                    "mime_type": mime_type,
+                    "duration": f"{duration:.2f}",
+                    "text_response": response.text # Text description from the model
+                })
+            else:
+                # If no image is generated, return text response or an error
+                return jsonify({
+                    "result_type": "text",
+                    "result": response.text if response.text else "Image generation failed. Model returned no image data.",
+                    "duration": f"{duration:.2f}",
+                    "warning": "Model did not return image data, returning text response instead."
+                })
+
+
         # --- Text/Multimodal Generation Logic ---
         else:
-            contents = [prompt]
+            contents = []
+            
+            # 1. Handle Multimodal Input (Image + Text)
             if image_base64:
                 # Decode base64 string back to bytes and load as PIL Image
                 img_data = base64.b64decode(image_base64)
                 img = Image.open(BytesIO(img_data))
-                # Insert the image part at the beginning for multimodal models
-                contents.insert(0, img)
-
+                # Insert the image part at the beginning
+                contents.append(img)
+                contents.append(prompt)
+            else:
+                 contents.append(prompt)
+            
+            # For standard text or multimodal input (image+text)
             response = GEMINI_CLIENT.models.generate_content(
                 model=model_name,
                 contents=contents
